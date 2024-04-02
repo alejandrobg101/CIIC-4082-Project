@@ -84,7 +84,7 @@ load_sprites: ;Shows sprites
   LDA sprites,X
   STA $0200,X
   INX
-  CPX #$ff ;How many sprites it shows, this case four
+  CPX #$ff ;How many sprites it shows
   BNE load_sprites
     
   ; write a nametable
