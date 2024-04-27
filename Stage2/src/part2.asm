@@ -9,7 +9,7 @@ player_dir: .res 1
 
 direction_state : .res 1 ; Direction state: 0 for left, 1 for right
 walk_state : .res 1      ; Walking state: 0 for standing, 1 for walking
-walk_frame_counter : .res 2 ; Counter for walking animation frames
+walk_frame_counter : .res 0 ; Counter for walking animation frames
 
 .segment "CODE"
 .proc irq_handler
@@ -24,7 +24,10 @@ walk_frame_counter : .res 2 ; Counter for walking animation frames
   LDA #$00
 
 	; JSR update_player
-  JSR draw_player
+  JSR draw_player_up
+  JSR draw_player_down
+  JSR draw_player_left
+  JSR draw_player_right
 
 
   STA $2005
@@ -44,25 +47,28 @@ walk_frame_counter : .res 2 ; Counter for walking animation frames
   STX $2001
   STX $4010
   BIT $2002
+
+  ; Initialize walk_state
+  LDA #$00
+  STA walk_state
+
 vblankwait:
   BIT $2002
   BPL vblankwait
 
-	LDX #$00
-	LDA #$FF
+  LDX #$00
+  LDA #$FF
 clear_oam:
-	STA $0200,X ; set sprite y-positions off the screen
-	INX
-	INX
-	INX
-	INX
-	BNE clear_oam
-
-	; initialize zero-page values
-	LDA #$40
-	STA player_x
-	LDA #$70
-	STA player_y
+  STA $0200,X
+  INX
+  INX
+  INX
+  INX
+  BNE clear_oam
+  LDA #$40
+  STA player_x
+  LDA #$70
+  STA player_y
 
 vblankwait2:
   BIT $2002
@@ -169,7 +175,7 @@ forever:
 ;   RTS
 ; .endproc
 
-.proc draw_player
+.proc draw_player_down
   ; save registers
   PHP
   PHA
@@ -178,26 +184,31 @@ forever:
   TYA
   PHA
 
-  ; Use a flag to alternate between sprite sets
+  ; Increment walk_frame_counter every frame
+  INC walk_frame_counter
+
+  ; Check if walk_frame_counter has reached the threshold for switching
   LDA walk_frame_counter
-  AND #$01  ; Keep only the least significant bit to alternate between 0 and 1
+  CMP #$10  ; Adjust this threshold to control the speed of the switch
+  BNE skip_switch
+
+  ; Reset walk_frame_counter and toggle walk_state
+  LDA #$00
+  STA walk_frame_counter
+
+  ; Toggle walk_state between 0 and 1
+  LDA walk_state
+  EOR #$01
+  STA walk_state
+
+skip_switch:
+  ; Determine which sprite set to use based on walk_state
+  LDA walk_state
   BEQ draw_sprite_set1
   JMP draw_sprite_set2
 
 draw_sprite_set1:
-  ; write player ship tile numbers for sprite set 1
-  LDA #$02
-  STA $0201
-  LDA #$03
-  STA $0205
-  LDA #$12
-  STA $0209
-  LDA #$13
-  STA $020d
-  JMP sprite_attributes_set1
-
-draw_sprite_set2:
-  ; write player ship tile numbers for sprite set 2
+  ; write player tile numbers for sprite set 1
   LDA #$04
   STA $0201
   LDA #$05
@@ -206,9 +217,21 @@ draw_sprite_set2:
   STA $0209
   LDA #$15
   STA $020d
+  JMP sprite_attributes_set1
+
+draw_sprite_set2:
+  ; write player tile numbers for sprite set 2
+  LDA #$06
+  STA $0201
+  LDA #$07
+  STA $0205
+  LDA #$16
+  STA $0209
+  LDA #$17
+  STA $020d
 
 sprite_attributes_set1:
-  ; write player ship tile attributes for both sets
+  ; write player tile attributes for both sets
   ; use palette 0
   LDA #$00
   STA $0202
@@ -248,7 +271,344 @@ sprite_attributes_set1:
   CLC
   ADC #$08
   STA $020f
+
+  ; restore registers and return
+  PLA
+  TAY
+  PLA
+  TAX
+  PLA
+  PLP
+  RTS
+.endproc
+
+.proc draw_player_up
+  ; save registers
+  PHP
+  PHA
+  TXA
+  PHA
+  TYA
+  PHA
+
+  ; Increment walk_frame_counter every frame
   INC walk_frame_counter
+
+  ; Check if walk_frame_counter has reached the threshold for switching
+  LDA walk_frame_counter
+  CMP #$10  ; Adjust this threshold to control the speed of the switch
+  BNE skip_switch
+
+  ; Reset walk_frame_counter and toggle walk_state
+  LDA #$00
+  STA walk_frame_counter
+
+  ; Toggle walk_state between 0 and 1
+  LDA walk_state
+  EOR #$01
+  STA walk_state
+
+skip_switch:
+  ; Determine which sprite set to use based on walk_state
+  LDA walk_state
+  BEQ draw_sprite_set1
+  JMP draw_sprite_set2
+
+draw_sprite_set1:
+  ; write player tile numbers for sprite set 1
+  LDA #$0A
+  STA $0211
+  LDA #$0B
+  STA $0215
+  LDA #$1A
+  STA $0219
+  LDA #$1B
+  STA $021d
+  JMP sprite_attributes_set1
+
+draw_sprite_set2:
+  ; write player tile numbers for sprite set 2
+  LDA #$0C
+  STA $0211
+  LDA #$0d
+  STA $0215
+  LDA #$1C
+  STA $0219
+  LDA #$1D
+  STA $021d
+
+sprite_attributes_set1:
+  ; write player tile attributes for both sets
+  ; use palette 0
+  LDA #$00
+  STA $0212
+  STA $0216
+  STA $021a
+  STA $021e
+
+  ; store tile locations
+  ; top left tile:
+  LDA player_y
+  STA $0210
+  LDA player_x
+  CLC
+  ADC #$16
+  STA $0213
+
+  ; top right tile (x + 8):
+  LDA player_y
+  STA $0214
+  LDA player_x
+  CLC
+  ADC #$1E
+  STA $0217
+
+  ; bottom left tile (y + 8):
+  LDA player_y
+  CLC
+  ADC #$08
+  STA $0218
+  LDA player_x
+  CLC
+  ADC #$16
+  STA $021b
+
+  ; bottom right tile (x + 8, y + 8)
+  LDA player_y
+  CLC
+  ADC #$08
+  STA $021c
+  LDA player_x
+  CLC
+  ADC #$1E
+  STA $021f
+
+  ; restore registers and return
+  PLA
+  TAY
+  PLA
+  TAX
+  PLA
+  PLP
+  RTS
+.endproc
+
+.proc draw_player_left
+  ; save registers
+  PHP
+  PHA
+  TXA
+  PHA
+  TYA
+  PHA
+
+  ; Increment walk_frame_counter every frame
+  INC walk_frame_counter
+
+  ; Check if walk_frame_counter has reached the threshold for switching
+  LDA walk_frame_counter
+  CMP #$10  ; Adjust this threshold to control the speed of the switch
+  BNE skip_switch
+
+  ; Reset walk_frame_counter and toggle walk_state
+  LDA #$00
+  STA walk_frame_counter
+
+  ; Toggle walk_state between 0 and 1
+  LDA walk_state
+  EOR #$01
+  STA walk_state
+
+skip_switch:
+  ; Determine which sprite set to use based on walk_state
+  LDA walk_state
+  BEQ draw_sprite_set1
+  JMP draw_sprite_set2
+
+draw_sprite_set1:
+  ; write player tile numbers for sprite set 1
+  LDA #$0E
+  STA $0221
+  LDA #$0F
+  STA $0225
+  LDA #$1E
+  STA $0229
+  LDA #$1F
+  STA $022d
+  JMP sprite_attributes_set1
+
+draw_sprite_set2:
+  ; write player tile numbers for sprite set 2
+  LDA #$24
+  STA $0221
+  LDA #$25
+  STA $0225
+  LDA #$34
+  STA $0229
+  LDA #$35
+  STA $022d
+
+sprite_attributes_set1:
+  ; write player tile attributes for both sets
+  ; use palette 0
+  LDA #$00
+  STA $0222
+  STA $0226
+  STA $022a
+  STA $022e
+
+  ; store tile locations
+  ; top left tile:
+  LDA player_y
+  CLC
+  ADC #$16
+  STA $0220
+  LDA player_x
+  STA $0223
+
+  ; top right tile (x + 8):
+  LDA player_y
+  CLC
+  ADC #$16
+  STA $0224
+  LDA player_x
+  CLC
+  ADC #$08
+  STA $0227
+
+  ; bottom left tile (y + 8):
+  LDA player_y
+  CLC
+  ADC #$1E
+  STA $0228
+  LDA player_x
+  STA $022b
+
+  ; bottom right tile (x + 8, y + 8)
+  LDA player_y
+  CLC
+  ADC #$1E
+  STA $022c
+  LDA player_x
+  CLC
+  ADC #$08
+  STA $022f
+
+  ; restore registers and return
+  PLA
+  TAY
+  PLA
+  TAX
+  PLA
+  PLP
+  RTS
+.endproc
+
+.proc draw_player_right
+  ; save registers
+  PHP
+  PHA
+  TXA
+  PHA
+  TYA
+  PHA
+
+  ; Increment walk_frame_counter every frame
+  INC walk_frame_counter
+
+  ; Check if walk_frame_counter has reached the threshold for switching
+  LDA walk_frame_counter
+  CMP #$10  ; Adjust this threshold to control the speed of the switch
+  BNE skip_switch
+
+  ; Reset walk_frame_counter and toggle walk_state
+  LDA #$00
+  STA walk_frame_counter
+
+  ; Toggle walk_state between 0 and 1
+  LDA walk_state
+  EOR #$01
+  STA walk_state
+
+skip_switch:
+  ; Determine which sprite set to use based on walk_state
+  LDA walk_state
+  BEQ draw_sprite_set1
+  JMP draw_sprite_set2
+
+draw_sprite_set1:
+  ; write player tile numbers for sprite set 1
+  LDA #$26
+  STA $0231
+  LDA #$27
+  STA $0235
+  LDA #$36
+  STA $0239
+  LDA #$37
+  STA $023d
+  JMP sprite_attributes_set1
+
+draw_sprite_set2:
+  ; write player tile numbers for sprite set 2
+  LDA #$2a
+  STA $0231
+  LDA #$2b
+  STA $0235
+  LDA #$3a
+  STA $0239
+  LDA #$3b
+  STA $023d
+
+sprite_attributes_set1:
+  ; write player tile attributes for both sets
+  ; use palette 0
+  LDA #$00
+  STA $0232
+  STA $0236
+  STA $023a
+  STA $023e
+
+  ; store tile locations
+  ; top left tile:
+  LDA player_y
+  CLC
+  ADC #$16
+  STA $0230
+  LDA player_x
+  CLC
+  ADC #$16
+  STA $0233
+
+  ; top right tile (x + 8):
+  LDA player_y
+  CLC
+  ADC #$16  
+  STA $0234
+  LDA player_x
+  CLC
+  ADC #$1E
+  STA $0237
+
+  ; bottom left tile (y + 8):
+  LDA player_y
+  CLC
+  ADC #$1E
+  STA $0238
+  LDA player_x
+  CLC
+  ADC #$16  
+  STA $023b
+
+  ; bottom right tile (x + 8, y + 8)
+  LDA player_y
+  CLC
+  ADC #$1e
+  STA $023c
+  LDA player_x
+  CLC
+  ADC #$1E
+  STA $023f
+
   ; restore registers and return
   PLA
   TAY
